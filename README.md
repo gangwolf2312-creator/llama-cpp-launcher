@@ -2,9 +2,9 @@
 
 一个为 Windows 设计的 `llama-server.exe` 图形化启动器，支持模型库自动扫描、参数可视化调节、硬件/模型类型自动推荐、批量测速和实时运行状态监控。
 
-![主界面](screenshot_main.png)
+![主界面](https://cdn.jsdelivr.net/gh/gangwolf2312-creator/llama-cpp-launcher@main/screenshot_main.png)
 
-![启动配置](screenshot_start.png)
+![启动配置](https://cdn.jsdelivr.net/gh/gangwolf2312-creator/llama-cpp-launcher@main/screenshot_start.png)
 
 ## 主要特性
 
