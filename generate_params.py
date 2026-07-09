@@ -1,0 +1,169 @@
+import json
+import os
+
+params = {
+    "categories": [
+        {
+            "id": "basic",
+            "name": "核心基础参数",
+            "icon": "🔧",
+            "params": [
+                {"name": "threads", "type": "int", "default": -1, "min": -1, "max": 128, "step": 2, "label": "CPU线程数(--threads)", "arg": "--threads", "help": "CPU计算用多少个线程。建议填偶数，如 4/8/16/32，-1 代表自动。"},
+                {"name": "host", "type": "string", "default": "127.0.0.1", "label": "监听地址(--host)", "arg": "--host", "help": "服务器监听的网络地址。本地使用 127.0.0.1，局域网共享可填 0.0.0.0。"},
+                {"name": "port", "type": "int", "default": 8080, "min": 1, "max": 65535, "label": "端口(--port)", "arg": "--port", "help": "服务器监听的端口号。默认 8080，如果被占用换一个即可。"},
+                {"name": "n-predict", "type": "int", "default": -1, "min": -1, "max": 65536, "label": "最大生成Token(--n-predict)", "arg": "--n-predict", "help": "一次最多生成多少字。-1 表示不限制，生成长文时可设大一点。"},
+                {"name": "batch-size", "type": "int", "default": 2048, "min": 1, "max": 8192, "label": "批次大小(--batch-size)", "arg": "--batch-size", "help": "一次性处理多少个提示词 Token。一般 2048，显存大可 4096。"},
+                {"name": "alias", "type": "string", "default": "", "label": "模型别名(-a)", "arg": "-a", "help": "给这个服务起个名字。API 调用时会显示这个别名。"},
+                {"name": "threads-http", "type": "int", "default": 1, "min": 1, "max": 64, "label": "HTTP线程数(--threads-http)", "arg": "--threads-http", "help": "处理 HTTP 请求的线程数。并发高时建议 2-4。"}
+            ]
+        },
+        {
+            "id": "context",
+            "name": "上下文与批处理",
+            "icon": "📦",
+            "params": [
+                {"name": "ctx-size", "type": "int", "default": 4096, "min": 256, "max": 5242880, "step": 4096, "label": "上下文大小(--ctx-size)", "arg": "--ctx-size", "help": "模型能记住多少前文。常用 4096(4k)、8192(8k)、32768(32k)、131072(128k)、262144(256k)。"},
+                {"name": "ubatch-size", "type": "int", "default": 512, "min": 1, "max": 65536, "label": "微批次(--ubatch-size)", "arg": "--ubatch-size", "help": "每次向模型喂多少个 Token。调小可省显存，一般 512。"},
+                {"name": "parallel", "type": "int", "default": 1, "min": 1, "max": 256, "label": "并行槽(--parallel)", "arg": "--parallel", "help": "同时处理多少个对话。填 1 最稳定，高并发可 2-8。"},
+                {"name": "cont-batching", "type": "bool", "default": True, "label": "连续批处理(--cont-batching)", "arg": "--cont-batching", "help": "打开后 GPU 会更忙，整体吞吐量更高。"},
+                {"name": "flash-attn", "type": "enum", "default": "auto", "options": ["on", "off", "auto"], "label": "Flash Attention(--flash-attn)", "arg": "--flash-attn", "help": "启用 Flash Attention 技术。能省显存、加速，推荐打开（on）。新版 llama-server 需要显式写 on/off/auto。"},
+                {"name": "ctx-checkpoints", "type": "int", "default": 0, "min": 0, "max": 65536, "label": "上下文检查点(--ctx-checkpoints)", "arg": "--ctx-checkpoints", "help": "上下文检查点间隔。TurboQuant 推荐 64，长文本可试 128/256。"}
+            ]
+        },
+        {
+            "id": "kv-cache",
+            "name": "KV Cache配置",
+            "icon": "💾",
+            "params": [
+                {"name": "cache-type-k", "type": "enum", "default": "f16", "options": ["f32", "f16", "bf16", "q8_0", "q4_0", "q4_1", "iq4_nl", "q5_0", "q5_1", "turbo2", "turbo3", "turbo4"], "label": "K缓存类型(--cache-type-k)", "arg": "--cache-type-k", "help": "K 缓存的量化格式。TurboQuant 推荐 q8_0 或 turbo4 来省显存。"},
+                {"name": "cache-type-v", "type": "enum", "default": "f16", "options": ["f32", "f16", "bf16", "q8_0", "q4_0", "q4_1", "iq4_nl", "q5_0", "q5_1", "turbo2", "turbo3", "turbo4"], "label": "V缓存类型(--cache-type-v)", "arg": "--cache-type-v", "help": "V 缓存的量化格式。TurboQuant 推荐 q8_0 或 turbo4 来省显存。"},
+                {"name": "defrag-thold", "type": "float", "default": 0.0, "min": 0.0, "max": 1.0, "step": 0.05, "label": "KV缓存整理阈值(--defrag-thold)", "arg": "--defrag-thold", "help": "KV 缓存碎片整理阈值。0 表示不整理，内存碎片多了可稍微调大。"},
+                {"name": "pooling", "type": "enum", "default": "none", "options": ["none", "mean", "cls", "last", "rank"], "label": "嵌入池化方式(--pooling)", "arg": "--pooling", "help": "做嵌入(Embedding)时怎么把多个 Token 合成一个向量。纯对话选 none。"},
+                {"name": "no-cache-prompt", "type": "bool", "default": False, "label": "不缓存提示词(--no-cache-prompt)", "arg": "--no-cache-prompt", "help": "不缓存系统提示词。每次请求都重新处理，会慢一些。"},
+                {"name": "no-warmup", "type": "bool", "default": False, "label": "跳过预热(--no-warmup)", "arg": "--no-warmup", "help": "启动时不做预热。启动更快，但第一次请求可能稍慢。"}
+            ]
+        },
+        {
+            "id": "decoding",
+            "name": "解码参数",
+            "icon": "🧠",
+            "params": [
+                {"name": "temp", "type": "float", "default": 0.8, "min": 0.0, "max": 2.0, "step": 0.05, "label": "温度(--temp)", "arg": "--temp", "help": "温度越高，回答越随机。精确/公文 0.1-0.3，标准 0.6-0.8，创意 1.0+。"},
+                {"name": "top-k", "type": "int", "default": 40, "min": -1, "max": 100000, "label": "Top-K(--top-k)", "arg": "--top-k", "help": "只从概率最高的 K 个字里选。常用 0(不限制)、20、40。"},
+                {"name": "top-p", "type": "float", "default": 0.95, "min": 0.0, "max": 1.0, "step": 0.01, "label": "Top-P(--top-p)", "arg": "--top-p", "help": "只从累计概率前 P% 的字里选。0.95 表示保留概率最高的 95% 候选。"},
+                {"name": "min-p", "type": "float", "default": 0.0, "min": 0.0, "max": 1.0, "step": 0.01, "label": "最小概率(--min-p)", "arg": "--min-p", "help": "过滤掉概率太低的结果。0 表示不限制，增大可减少胡言乱语。"},
+                {"name": "repeat-penalty", "type": "float", "default": 1.0, "min": 0.0, "max": 2.0, "step": 0.05, "label": "重复惩罚(--repeat-penalty)", "arg": "--repeat-penalty", "help": "大于 1 会让模型减少重复。精确 1.1-1.2，创意 1.0。"},
+                {"name": "repeat-last-n", "type": "int", "default": 64, "min": 0, "max": 4096, "label": "重复检查范围(--repeat-last-n)", "arg": "--repeat-last-n", "help": "检查最近多少个字是否重复。范围越大，重复惩罚越严格。"},
+                {"name": "presence-penalty", "type": "float", "default": 0.0, "min": -2.0, "max": 2.0, "step": 0.05, "label": "存在惩罚(--presence-penalty)", "arg": "--presence-penalty", "help": "已经出现过的主题会被打压。正值让模型更爱换话题。"},
+                {"name": "frequency-penalty", "type": "float", "default": 0.0, "min": -2.0, "max": 2.0, "step": 0.05, "label": "频率惩罚(--frequency-penalty)", "arg": "--frequency-penalty", "help": "出现越多的词越容易被打压。可减少车轱辘话。"}
+            ]
+        },
+        {
+            "id": "sampling",
+            "name": "采样策略",
+            "icon": "🎲",
+            "params": [
+                {"name": "seed", "type": "int", "default": -1, "min": -1, "max": 2147483647, "label": "随机种子(--seed)", "arg": "--seed", "help": "-1 表示每次随机，固定数字可让结果可复现。"},
+                {"name": "dynatemp-range", "type": "float", "default": 0.0, "min": 0.0, "max": 1.0, "step": 0.01, "label": "动态温度范围(--dynatemp-range)", "arg": "--dynatemp-range", "help": "动态温度的波动范围。0 表示关闭动态温度。"},
+                {"name": "dynatemp-exp", "type": "float", "default": 1.0, "min": 0.0, "max": 10.0, "step": 0.1, "label": "动态温度指数(--dynatemp-exp)", "arg": "--dynatemp-exp", "help": "动态温度指数。高级选项，不懂保持 1。"},
+                {"name": "mirostat", "type": "int", "default": 0, "min": 0, "max": 2, "label": "Mirostat模式(--mirostat)", "arg": "--mirostat", "help": "自动调整温度控制输出困惑度。0 关闭，1 或 2 开启。"},
+                {"name": "mirostat-lr", "type": "float", "default": 0.1, "min": 0.0, "max": 1.0, "step": 0.01, "label": "Mirostat学习率(--mirostat-lr)", "arg": "--mirostat-lr", "help": "Mirostat 调整速度。越大反应越快，0.1 较稳。"},
+                {"name": "mirostat-ent", "type": "float", "default": 5.0, "min": 0.0, "max": 10.0, "step": 0.1, "label": "Mirostat困惑度(--mirostat-ent)", "arg": "--mirostat-ent", "help": "Mirostat 目标困惑度。越大输出越多样，5.0 是常用值。"},
+                {"name": "typical", "type": "float", "default": 1.0, "min": 0.0, "max": 1.0, "step": 0.01, "label": "Typical采样(--typical)", "arg": "--typical", "help": "Typical 采样概率。1.0 表示关闭，调小会让输出更典型。"},
+                {"name": "xtc-probability", "type": "float", "default": 0.0, "min": 0.0, "max": 1.0, "step": 0.01, "label": "XTC概率(--xtc-probability)", "arg": "--xtc-probability", "help": "XTC 采样触发概率。0 表示关闭，用于提升多样性。"},
+                {"name": "xtc-threshold", "type": "float", "default": 0.1, "min": 0.0, "max": 1.0, "step": 0.01, "label": "XTC阈值(--xtc-threshold)", "arg": "--xtc-threshold", "help": "XTC 采样阈值。越低越容易剔除高概率词。"}
+            ]
+        },
+        {
+            "id": "memory",
+            "name": "GPU与内存",
+            "icon": "💾",
+            "params": [
+                {"name": "mlock", "type": "bool", "default": False, "label": "锁定内存(--mlock)", "arg": "--mlock", "help": "把模型锁在内存里，防止被换出。内存足够时可开。"},
+                {"name": "mmap", "type": "bool", "default": True, "label": "内存映射(--mmap)", "arg": "--mmap", "help": "用内存映射加载模型。启动快、省内存，推荐打开。"},
+                {"name": "no-mmap", "type": "bool", "default": False, "label": "禁用内存映射(--no-mmap)", "arg": "--no-mmap", "help": "强制一次性加载整个模型。启动慢但更稳定。"},
+                {"name": "split-mode", "type": "enum", "default": "layer", "options": ["none", "layer", "row", "tensor"], "label": "模型拆分模式(--split-mode)", "arg": "--split-mode", "help": "多 GPU 时怎么切模型。TurboQuant 多卡推荐 tensor。"},
+                {"name": "tensor-split", "type": "string", "default": "", "label": "张量切分(--tensor-split)", "arg": "--tensor-split", "help": "多 GPU 显存分配比例。例如两张卡均分填 1,1。"},
+                {"name": "main-gpu", "type": "int", "default": 0, "min": 0, "max": 16, "label": "主GPU(--main-gpu)", "arg": "--main-gpu", "help": "多 GPU 时哪张卡是主卡。单卡不用改。"},
+                {"name": "ngl", "type": "string", "default": "99", "label": "GPU加载层数(--ngl)", "arg": "--ngl", "help": "GPU 加载层数。99 表示全部，TurboQuant 可填 all。"},
+                {"name": "no-kv-offload", "type": "bool", "default": False, "label": "KV不卸载(--no-kv-offload)", "arg": "--no-kv-offload", "help": "强制 KV 缓存留在 CPU。显存不够时可开，但会变慢。"},
+                {"name": "check-tensors", "type": "bool", "default": False, "label": "检查张量(--check-tensors)", "arg": "--check-tensors", "help": "启动时检查模型文件是否损坏。慢，首次或怀疑文件损坏可开。"}
+            ]
+        },
+        {
+            "id": "network",
+            "name": "网络与安全",
+            "icon": "🌐",
+            "params": [
+                {"name": "api-key", "type": "string", "default": "", "label": "API密钥(--api-key)", "arg": "--api-key", "help": "访问 API 需要携带的密钥。留空表示不启用鉴权。"},
+                {"name": "timeout", "type": "int", "default": 600, "min": 1, "max": 3600, "label": "请求超时(秒)(--timeout)", "arg": "--timeout", "help": "单个请求最多等多少秒。长文本生成建议设大点。"},
+                {"name": "slots", "type": "bool", "default": False, "label": "显示槽状态(--slots)", "arg": "--slots", "help": "在 API 端点中显示每个对话槽的状态。"},
+                {"name": "metrics", "type": "bool", "default": False, "label": "Prometheus指标(--metrics)", "arg": "--metrics", "help": "开启 Prometheus 监控指标。需要外部监控工具抓取。"}
+            ]
+        },
+        {
+            "id": "logging",
+            "name": "日志",
+            "icon": "📋",
+            "params": [
+                {"name": "log-prefix", "type": "bool", "default": False, "label": "日志前缀(--log-prefix)", "arg": "--log-prefix", "help": "每条日志前面加上时间戳前缀。调试排错时有用。"},
+                {"name": "log-disable", "type": "bool", "default": False, "label": "禁用日志(--log-disable)", "arg": "--log-disable", "help": "关闭日志文件写入。想省硬盘或隐私考虑可开。"},
+                {"name": "verbosity", "type": "int", "default": 0, "min": 0, "max": 5, "label": "日志详细程度(--verbosity)", "arg": "--verbosity", "help": "日志啰嗦程度。0 最安静，5 最详细。"},
+                {"name": "log-colors", "type": "enum", "default": "auto", "options": ["on", "off", "auto"], "label": "彩色日志(--log-colors)", "arg": "--log-colors", "help": "终端日志带颜色。on 始终启用，off 关闭，auto 仅在终端输出时启用。"}
+            ]
+        },
+        {
+            "id": "inference",
+            "name": "推理与模板",
+            "icon": "🧠",
+            "params": [
+                {"name": "reasoning-format", "type": "enum", "default": "none", "options": ["none", "deepseek", "llama", "qwen", "custom"], "label": "推理格式(--reasoning-format)", "arg": "--reasoning-format", "help": "提取推理过程/答案的格式。按模型选 deepseek/llama/qwen 等。"},
+                {"name": "no-context-shift", "type": "bool", "default": False, "label": "禁止上下文移位(--no-context-shift)", "arg": "--no-context-shift", "help": "上下文超长时不自动截断。超了会报错，谨慎开启。"},
+                {"name": "reasoning", "type": "enum", "default": "off", "options": ["off", "on", "auto"], "label": "启用推理(--reasoning)", "arg": "--reasoning", "help": "开启推理模式。需要模型支持，设为 on 启用，auto 让服务器自行决定。"},
+                {"name": "system-prompt", "type": "text", "default": "", "label": "系统提示词(--system-prompt)", "arg": "--system-prompt", "hidden": True, "help": "设置模型扮演的角色和行为规则。"}
+            ]
+        },
+        {
+            "id": "huggingface",
+            "name": "模型下载",
+            "icon": "🤗",
+            "params": [
+                {"name": "hf-repo", "type": "string", "default": "", "label": "HuggingFace仓库(--hf-repo)", "arg": "--hf-repo", "help": "HuggingFace 仓库 ID。可自动下载该仓库里的模型。"},
+                {"name": "hf-file", "type": "string", "default": "", "label": "仓库文件名(--hf-file)", "arg": "--hf-file", "help": "仓库里具体要下载哪个文件名。"},
+                {"name": "model-url", "type": "string", "default": "", "label": "模型下载URL(--model-url)", "arg": "--model-url", "help": "模型文件的直接下载链接。"},
+                {"name": "hf-token", "type": "string", "default": "", "label": "HuggingFace令牌(--hf-token)", "arg": "--hf-token", "help": "私有仓库或受限模型需要的访问令牌。"}
+            ]
+        },
+        {
+            "id": "special",
+            "name": "高级",
+            "icon": "✨",
+            "params": [
+                {"name": "lora-scaled", "type": "string", "default": "", "label": "LoRA缩放(--lora-scaled)", "arg": "--lora-scaled", "help": "LoRA 适配器路径和缩放系数。格式：路径,1.0。"},
+                {"name": "control-vector-layer-range", "type": "string", "default": "", "label": "控制向量层范围(--control-vector-layer-range)", "arg": "--control-vector-layer-range", "help": "控制向量作用的层范围。例如 3,5 表示 3 到 5 层。"},
+                {"name": "jinja", "type": "bool", "default": False, "label": "Jinja模板(--jinja)", "arg": "--jinja", "help": "使用 Jinja2 聊天模板。新版模型通常需要打开。打开后，点后面的'...'可选聊天模板文件。", "browse": {"key": "chat_template_file", "arg": "--chat-template-file", "filetypes": [["Jinja", "*.jinja"], ["All files", "*.*"]]}},
+                {"name": "spec-type", "type": "enum", "default": "none", "options": ["none", "draft-simple", "draft-eagle3", "draft-mtp", "ngram-simple", "ngram-map-k", "ngram-map-k4v", "ngram-mod", "ngram-cache"], "label": "投机解码类型(--spec-type)", "arg": "--spec-type", "help": "用小的草稿模型辅助加速。TurboQuant 内置 MTP 请选 draft-mtp；用独立小模型请选 draft-simple。"},
+                {"name": "spec-draft-p-min", "type": "float", "default": 0.0, "min": 0.0, "max": 1.0, "step": 0.01, "label": "投机解码最小概率(--spec-draft-p-min)", "arg": "--spec-draft-p-min", "help": "投机草稿接受的最小概率。太低会浪费计算。"},
+                {"name": "spec-draft-n-max", "type": "int", "default": 0, "min": 0, "max": 64, "label": "投机解码最大步数(--spec-draft-n-max)", "arg": "--spec-draft-n-max", "help": "投机解码每次最多连续猜几步。TurboQuant 推荐 3。"},
+                {"name": "extra-args", "type": "text", "default": "", "label": "额外参数(--extra-args)", "arg": "--extra-args", "help": "会原样拼到启动命令里。多个参数用空格隔开，例如：-kvu -fit off。"}
+            ]
+        },
+        {
+            "id": "turboquant",
+            "name": "TurboQuant 优化",
+            "icon": "🚀",
+            "params": [
+                {"name": "fit", "type": "enum", "default": "on", "options": ["on", "off"], "label": "显存自适应(-fit)", "arg": "-fit", "help": "自动调整未设置参数以适配显存。TurboQuant 多卡时推荐 off，避免覆盖 -ngl/-sm/-ts 等设置。"},
+                {"name": "fit-target", "type": "string", "default": "", "label": "目标显存余量(-fitt)", "arg": "-fitt", "help": "为每块 GPU 设置目标显存余量，单位 MiB，逗号分隔。如 1024,512 表示卡 0 留 1GB、卡 1 留 512MB。"},
+                {"name": "fit-ctx", "type": "int", "default": 0, "min": 0, "max": 5242880, "step": 4096, "label": "fit最小上下文(-fitc)", "arg": "-fitc", "help": "显存自适应可接受的最小上下文。设 0 代表允许自动压缩上下文；长文本可设 8192/32768 等。"},
+                {"name": "kv-unified", "type": "bool", "default": False, "label": "统一 KV 缓存(-kvu)", "arg": "-kvu", "help": "TurboQuant 分支专用。开启后所有序列共享同一块 KV 缓存。"},
+                {"name": "no-kv-unified", "type": "bool", "default": False, "label": "禁用统一 KV 缓存(-no-kvu)", "arg": "-no-kvu", "help": "TurboQuant 分支专用。显式关闭统一 KV 缓存。与 -kvu 不要同时开。"}
+            ]
+        }
+    ]
+}
+
+out_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "llama-params.json")
+with open(out_path, 'w', encoding='utf-8') as f:
+    json.dump(params, f, ensure_ascii=False, indent=2)
+print(f"written {out_path}")

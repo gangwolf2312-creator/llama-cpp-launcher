@@ -1,0 +1,139 @@
+{
+  "app": {
+    "version": "3.0",
+    "theme": "darkly",
+    "language": "zh-CN"
+  },
+  "paths": {
+    "llama_server": "D:/llamatmp/bin/Release/llama-server.exe",
+    "model_library": "D:/models",
+    "vision_model": "D:\\models\\mudler\\AgentWorld-35B-A3B-APEX-MTP-I-Compact\\mmproj.gguf",
+    "mtp_model": "",
+    "chat_template_file": "D:/models/mudler/AgentWorld-35B-A3B-APEX-MTP-I-Compact/chat_template.jinja",
+    "log_file": "",
+    "lora_file": "",
+    "control_vector_file": "",
+    "grammar_file": "",
+    "json_schema_file": "",
+    "webui_path": "D:/llama-launcher/Web UI",
+    "system_prompt_file": "",
+    "last_model": "D:\\models\\mudler\\AgentWorld-35B-A3B-APEX-MTP-I-Compact\\Qwen-AgentWorld-35B-A3B-APEX-MTP-I-Compact.gguf"
+  },
+  "ui": {
+    "window_width": 2880,
+    "window_height": 1659,
+    "splitter_distance_left": 1017,
+    "splitter_distance_right_log": 500,
+    "last_tab": 0
+  },
+  "server": {
+    "auto_start": false,
+    "last_model": "D:\\models\\mudler\\AgentWorld-35B-A3B-APEX-MTP-I-Compact\\Qwen-AgentWorld-35B-A3B-APEX-MTP-I-Compact.gguf",
+    "last_preset": "默认助手"
+  },
+  "api": {
+    "url": "http://127.0.0.1:8080/v1",
+    "key": "",
+    "model_id": "",
+    "mode": "local"
+  },
+  "system_prompts": {
+    "默认助手": "You are a helpful assistant.",
+    "代码专家": "You are an expert programmer. Write clean, efficient, well-documented code.",
+    "创意写作": "You are a creative writing assistant. Help with storytelling, character development, and vivid descriptions.",
+    "公文严谨": "You are a professional document assistant. Provide precise, formal, and well-structured responses suitable for official documents.",
+    "Kimi预设-精确模式": "You are Kimi, an AI assistant developed by Moonshot AI. Provide accurate, concise, and well-reasoned responses."
+  },
+  "temperature_presets": {
+    "精确公文": {
+      "name": "精确公文",
+      "description": "接近贪婪解码，术语精准，几乎无发散。适合法规引用、技术参数、数据提取。",
+      "temperature": 0.1,
+      "top_k": 10,
+      "top_p": 1.0,
+      "min_p": 0.1,
+      "repeat_penalty": 1.1,
+      "repeat_last_n": 128,
+      "mirostat_mode": 0,
+      "mirostat_tau": 5.0,
+      "mirostat_eta": 0.1,
+      "frequency_penalty": 0.0,
+      "presence_penalty": 0.0
+    },
+    "标准平衡": {
+      "name": "标准平衡",
+      "description": "llama.cpp 官方默认风格，流畅自然，适合大多数通用场景。",
+      "temperature": 0.7,
+      "top_k": 40,
+      "top_p": 0.9,
+      "min_p": 0.05,
+      "repeat_penalty": 1.0,
+      "repeat_last_n": 64,
+      "mirostat_mode": 0,
+      "mirostat_tau": 5.0,
+      "mirostat_eta": 0.1,
+      "frequency_penalty": 0.0,
+      "presence_penalty": 0.0
+    },
+    "创意写作": {
+      "name": "创意写作",
+      "description": "高温 + Min-P 硬兜底，有灵气不套路。适合标题、导语、头脑风暴。",
+      "temperature": 1.5,
+      "top_k": 0,
+      "top_p": 1.0,
+      "min_p": 0.1,
+      "repeat_penalty": 1.0,
+      "repeat_last_n": 64,
+      "mirostat_mode": 0,
+      "mirostat_tau": 5.0,
+      "mirostat_eta": 0.1,
+      "frequency_penalty": 0.0,
+      "presence_penalty": 0.0
+    },
+    "推理探索": {
+      "name": "推理探索",
+      "description": "高温仍保持逻辑连贯，适合让模型换角度审视问题、多方案比选。",
+      "temperature": 2.0,
+      "top_k": 0,
+      "top_p": 1.0,
+      "min_p": 0.05,
+      "repeat_penalty": 1.0,
+      "repeat_last_n": 64,
+      "mirostat_mode": 0,
+      "mirostat_tau": 5.0,
+      "mirostat_eta": 0.1,
+      "frequency_penalty": 0.0,
+      "presence_penalty": 0.0
+    },
+    "长文本稳定": {
+      "name": "长文本稳定",
+      "description": "Mirostat V2 自动控温，维持长文本前后风格一致。适合一口气写完章节。",
+      "temperature": 0.8,
+      "top_k": 40,
+      "top_p": 0.9,
+      "min_p": 0.05,
+      "repeat_penalty": 1.0,
+      "repeat_last_n": 64,
+      "mirostat_mode": 2,
+      "mirostat_tau": 5.0,
+      "mirostat_eta": 0.1,
+      "frequency_penalty": 0.0,
+      "presence_penalty": 0.0
+    },
+    "规划润色": {
+      "name": "规划润色",
+      "description": "中高温润色 + 大窗口重复惩罚，打磨正式规划文本。",
+      "temperature": 0.9,
+      "top_k": 0,
+      "top_p": 0.95,
+      "min_p": 0.05,
+      "repeat_penalty": 1.15,
+      "repeat_last_n": 256,
+      "mirostat_mode": 0,
+      "mirostat_tau": 5.0,
+      "mirostat_eta": 0.1,
+      "frequency_penalty": 0.0,
+      "presence_penalty": 0.0
+    }
+  }
+}
